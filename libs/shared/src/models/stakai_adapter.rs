@@ -16,7 +16,7 @@ use stakai::{
     GenerateResponse, GoogleOptions, Headers, Inference, InferenceConfig, Message, MessageContent,
     Model, OpenAIApiConfig, OpenAIOptions, ProviderOptions, ReasoningEffort, ResponsesConfig, Role,
     StreamEvent, ThinkingOptions, Tool, ToolFunction, Usage,
-    providers::anthropic::AnthropicConfig as StakaiAnthropicConfig,
+    providers::anthropic::AnthropicConfig as StakaiAnthropicConfig, providers::kimi::KimiConfig,
     providers::openai::OpenAIConfig as StakaiOpenAIConfig, providers::openrouter::OpenRouterConfig,
     registry::ProviderRegistry,
 };
@@ -468,6 +468,15 @@ pub fn build_inference_config(config: &LLMProviderConfig) -> Result<InferenceCon
                         inference_config.gemini(api_key.to_string(), api_endpoint.clone());
                 }
             }
+            ProviderConfig::Kimi { api_endpoint, .. } => {
+                if let Some(api_key) = provider_config.api_key() {
+                    let mut kimi_config = KimiConfig::new(api_key.to_string());
+                    if let Some(endpoint) = api_endpoint {
+                        kimi_config = kimi_config.with_base_url(endpoint.clone());
+                    }
+                    inference_config = inference_config.kimi_config(kimi_config);
+                }
+            }
             ProviderConfig::Stakpak { api_endpoint, .. } => {
                 // Skip if no api_key - stakpak is optional
                 if let Some(api_key) = provider_config.api_key() {
@@ -532,6 +541,7 @@ fn build_provider_registry_direct(config: &LLMProviderConfig) -> Result<Provider
     };
     use stakai::providers::copilot::{CopilotConfig, CopilotProvider};
     use stakai::providers::gemini::{GeminiConfig as StakaiGeminiConfig, GeminiProvider};
+    use stakai::providers::kimi::{KimiConfig, KimiProvider};
     use stakai::providers::openai::{OpenAIConfig as StakaiOpenAIConfig, OpenAIProvider};
     use stakai::providers::openrouter::{OpenRouterConfig, OpenRouterProvider};
     use stakai::providers::stakpak::{StakpakProvider, StakpakProviderConfig};
@@ -579,6 +589,17 @@ fn build_provider_registry_direct(config: &LLMProviderConfig) -> Result<Provider
                     let provider = GeminiProvider::new(gemini_config)
                         .map_err(|e| format!("Failed to create Gemini provider: {}", e))?;
                     registry = registry.register("google", provider);
+                }
+            }
+            ProviderConfig::Kimi { api_endpoint, .. } => {
+                if let Some(api_key) = provider_config.api_key() {
+                    let mut kimi_config = KimiConfig::new(api_key.to_string());
+                    if let Some(endpoint) = api_endpoint {
+                        kimi_config = kimi_config.with_base_url(endpoint.clone());
+                    }
+                    let provider = KimiProvider::new(kimi_config)
+                        .map_err(|e| format!("Failed to create Kimi provider: {}", e))?;
+                    registry = registry.register("kimi", provider);
                 }
             }
             ProviderConfig::Stakpak { api_endpoint, .. } => {
@@ -1703,6 +1724,24 @@ mod tests {
             ProviderConfig::Gemini {
                 api_key: Some("gemini-test-key".to_string()),
                 api_endpoint: None,
+                auth: None,
+            },
+        );
+
+        let result = build_inference_config(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_inference_config_with_kimi() {
+        use crate::models::llm::ProviderConfig;
+
+        let mut config = LLMProviderConfig::new();
+        config.add_provider(
+            "kimi",
+            ProviderConfig::Kimi {
+                api_key: Some("kimi-test-key".to_string()),
+                api_endpoint: Some("https://api.kimi.com/coding/v1".to_string()),
                 auth: None,
             },
         );

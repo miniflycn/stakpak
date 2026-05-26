@@ -6243,6 +6243,7 @@ dependencies = [
  "dirs",
  "futures-util",
  "libsql",
+ "prost",
  "pulldown-cmark",
  "reqwest",
  "serde",

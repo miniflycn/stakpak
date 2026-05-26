@@ -12,6 +12,7 @@
 //! - `openai` - OpenAI API
 //! - `anthropic` - Anthropic API (supports OAuth via `access_token`)
 //! - `gemini` - Google Gemini API
+//! - `kimi` - Kimi OpenAI-compatible API
 //! - `bedrock` - AWS Bedrock (uses AWS credential chain, no API key)
 //!
 //! For built-in providers, you can use the model name directly without a prefix:
@@ -126,6 +127,20 @@ pub enum ProviderConfig {
     },
     /// Google Gemini provider configuration
     Gemini {
+        /// Legacy API key field (prefer `auth` field)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        api_key: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        api_endpoint: Option<String>,
+        /// Authentication credentials (preferred over api_key)
+        #[serde(skip_serializing_if = "Option::is_none")]
+        auth: Option<ProviderAuth>,
+    },
+    /// Kimi provider configuration
+    ///
+    /// Kimi exposes an OpenAI-compatible chat completions API. The default
+    /// endpoint is `https://api.kimi.com/coding/v1`.
+    Kimi {
         /// Legacy API key field (prefer `auth` field)
         #[serde(skip_serializing_if = "Option::is_none")]
         api_key: Option<String>,
@@ -268,6 +283,7 @@ impl ProviderConfig {
             ProviderConfig::OpenAI { .. } => "openai",
             ProviderConfig::Anthropic { .. } => "anthropic",
             ProviderConfig::Gemini { .. } => "gemini",
+            ProviderConfig::Kimi { .. } => "kimi",
             ProviderConfig::Custom { .. } => "custom",
             ProviderConfig::Stakpak { .. } => "stakpak",
             ProviderConfig::Bedrock { .. } => "amazon-bedrock",
@@ -289,6 +305,7 @@ impl ProviderConfig {
             ProviderConfig::OpenAI { api_key, .. } => api_key.as_deref(),
             ProviderConfig::Anthropic { api_key, .. } => api_key.as_deref(),
             ProviderConfig::Gemini { api_key, .. } => api_key.as_deref(),
+            ProviderConfig::Kimi { api_key, .. } => api_key.as_deref(),
             ProviderConfig::Custom { api_key, .. } => api_key.as_deref(),
             ProviderConfig::Stakpak { api_key, .. } => api_key.as_deref(),
             ProviderConfig::OpenRouter { api_key, .. } => api_key.as_deref(),
@@ -303,6 +320,7 @@ impl ProviderConfig {
             ProviderConfig::OpenAI { auth, .. } => auth.as_ref(),
             ProviderConfig::Anthropic { auth, .. } => auth.as_ref(),
             ProviderConfig::Gemini { auth, .. } => auth.as_ref(),
+            ProviderConfig::Kimi { auth, .. } => auth.as_ref(),
             ProviderConfig::Custom { auth, .. } => auth.as_ref(),
             ProviderConfig::Stakpak { auth, .. } => auth.as_ref(),
             ProviderConfig::Bedrock { .. } => None,
@@ -327,6 +345,7 @@ impl ProviderConfig {
         match self {
             ProviderConfig::OpenAI { api_key, .. }
             | ProviderConfig::Gemini { api_key, .. }
+            | ProviderConfig::Kimi { api_key, .. }
             | ProviderConfig::Custom { api_key, .. }
             | ProviderConfig::Stakpak { api_key, .. }
             | ProviderConfig::OpenRouter { api_key, .. } => {
@@ -367,6 +386,11 @@ impl ProviderConfig {
                 ..
             }
             | ProviderConfig::Gemini {
+                auth: auth_field,
+                api_key,
+                ..
+            }
+            | ProviderConfig::Kimi {
                 auth: auth_field,
                 api_key,
                 ..
@@ -426,6 +450,11 @@ impl ProviderConfig {
                 api_key,
                 ..
             }
+            | ProviderConfig::Kimi {
+                auth: auth_field,
+                api_key,
+                ..
+            }
             | ProviderConfig::Custom {
                 auth: auth_field,
                 api_key,
@@ -471,6 +500,7 @@ impl ProviderConfig {
             ProviderConfig::OpenAI { api_endpoint, .. } => api_endpoint.as_deref(),
             ProviderConfig::Anthropic { api_endpoint, .. } => api_endpoint.as_deref(),
             ProviderConfig::Gemini { api_endpoint, .. } => api_endpoint.as_deref(),
+            ProviderConfig::Kimi { api_endpoint, .. } => api_endpoint.as_deref(),
             ProviderConfig::Custom { api_endpoint, .. } => Some(api_endpoint.as_str()),
             ProviderConfig::Stakpak { api_endpoint, .. } => api_endpoint.as_deref(),
             ProviderConfig::OpenRouter { api_endpoint, .. } => api_endpoint.as_deref(),
@@ -488,6 +518,7 @@ impl ProviderConfig {
             ProviderConfig::OpenAI { api_endpoint, .. }
             | ProviderConfig::Anthropic { api_endpoint, .. }
             | ProviderConfig::Gemini { api_endpoint, .. }
+            | ProviderConfig::Kimi { api_endpoint, .. }
             | ProviderConfig::Stakpak { api_endpoint, .. }
             | ProviderConfig::GitHubCopilot { api_endpoint, .. }
             | ProviderConfig::OpenRouter { api_endpoint, .. } => {
@@ -572,6 +603,24 @@ impl ProviderConfig {
         ProviderConfig::Gemini {
             api_key: None,
             api_endpoint: None,
+            auth: Some(auth),
+        }
+    }
+
+    /// Create a Kimi provider config (legacy, uses api_key field)
+    pub fn kimi(api_key: Option<String>, api_endpoint: Option<String>) -> Self {
+        ProviderConfig::Kimi {
+            api_key,
+            api_endpoint,
+            auth: None,
+        }
+    }
+
+    /// Create a Kimi provider config with auth
+    pub fn kimi_with_auth(auth: ProviderAuth, api_endpoint: Option<String>) -> Self {
+        ProviderConfig::Kimi {
+            api_key: None,
+            api_endpoint,
             auth: Some(auth),
         }
     }
@@ -680,6 +729,11 @@ impl ProviderConfig {
                 auth: None,
             }),
             "gemini" => Some(ProviderConfig::Gemini {
+                api_key: None,
+                api_endpoint: None,
+                auth: None,
+            }),
+            "kimi" => Some(ProviderConfig::Kimi {
                 api_key: None,
                 api_endpoint: None,
                 auth: None,
@@ -1161,6 +1215,19 @@ mod tests {
     }
 
     #[test]
+    fn test_provider_config_kimi_serialization() {
+        let config = ProviderConfig::Kimi {
+            api_key: Some("kimi-key".to_string()),
+            api_endpoint: Some("https://api.kimi.com/coding/v1".to_string()),
+            auth: None,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"type\":\"kimi\""));
+        assert!(json.contains("\"api_key\":\"kimi-key\""));
+        assert!(json.contains("\"api_endpoint\":\"https://api.kimi.com/coding/v1\""));
+    }
+
+    #[test]
     fn test_provider_config_custom_serialization() {
         let config = ProviderConfig::Custom {
             api_key: Some("sk-custom".to_string()),
@@ -1212,6 +1279,19 @@ mod tests {
     }
 
     #[test]
+    fn test_provider_config_deserialization_kimi() {
+        let json = r#"{"type":"kimi","api_key":"kimi-key","api_endpoint":"https://api.kimi.com/coding/v1"}"#;
+        let config: ProviderConfig = serde_json::from_str(json).unwrap();
+        assert!(matches!(config, ProviderConfig::Kimi { .. }));
+        assert_eq!(config.provider_type(), "kimi");
+        assert_eq!(config.api_key(), Some("kimi-key"));
+        assert_eq!(
+            config.api_endpoint(),
+            Some("https://api.kimi.com/coding/v1")
+        );
+    }
+
+    #[test]
     fn test_provider_config_deserialization_custom() {
         let json =
             r#"{"type":"custom","api_endpoint":"http://localhost:4000","api_key":"sk-custom"}"#;
@@ -1234,6 +1314,14 @@ mod tests {
 
         let gemini = ProviderConfig::gemini(Some("gemini-key".to_string()));
         assert_eq!(gemini.provider_type(), "gemini");
+
+        let kimi = ProviderConfig::kimi(
+            Some("kimi-key".to_string()),
+            Some("https://api.kimi.com/coding/v1".to_string()),
+        );
+        assert_eq!(kimi.provider_type(), "kimi");
+        assert_eq!(kimi.api_key(), Some("kimi-key"));
+        assert_eq!(kimi.api_endpoint(), Some("https://api.kimi.com/coding/v1"));
 
         let custom = ProviderConfig::custom(
             "http://localhost:4000".to_string(),

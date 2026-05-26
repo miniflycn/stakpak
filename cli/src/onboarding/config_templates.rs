@@ -4,7 +4,7 @@
 //!
 //! Providers are configured in a `providers` HashMap where:
 //! - The key becomes the model prefix for custom providers
-//! - Built-in types: `openai`, `anthropic`, `gemini`
+//! - Built-in types: `openai`, `anthropic`, `gemini`, `kimi`
 //! - Custom type: `custom` for OpenAI-compatible providers
 //!
 //! # Built-in Providers
@@ -59,6 +59,8 @@ use stakpak_shared::models::llm::ProviderConfig;
 
 /// Default model for all new profiles
 pub const DEFAULT_MODEL: &str = "claude-opus-4-6";
+pub const KIMI_DEFAULT_BASE_URL: &str = "https://api.kimi.com/coding/v1";
+pub const KIMI_DEFAULT_MODEL: &str = "kimi/K2.6";
 
 /// Generate OpenAI profile configuration (credentials stored separately in config.toml auth field)
 pub fn generate_openai_profile() -> ProfileConfig {
@@ -90,6 +92,24 @@ pub fn generate_gemini_profile() -> ProfileConfig {
         ProviderConfig::Gemini {
             api_key: None,
             api_endpoint: None,
+            auth: None,
+        },
+    );
+    profile
+}
+
+/// Generate Kimi profile configuration (credentials stored separately in config.toml auth field)
+pub fn generate_kimi_profile() -> ProfileConfig {
+    let mut profile = ProfileConfig {
+        provider: Some(ProviderType::Local),
+        model: Some(KIMI_DEFAULT_MODEL.to_string()),
+        ..ProfileConfig::default()
+    };
+    profile.providers.insert(
+        "kimi".to_string(),
+        ProviderConfig::Kimi {
+            api_key: None,
+            api_endpoint: Some(KIMI_DEFAULT_BASE_URL.to_string()),
             auth: None,
         },
     );
@@ -198,6 +218,7 @@ pub fn generate_custom_provider_profile(
 pub enum BuiltinProvider {
     OpenAI,
     Gemini,
+    Kimi,
     Anthropic,
     OpenRouter,
 }
@@ -207,6 +228,7 @@ impl BuiltinProvider {
         match self {
             BuiltinProvider::OpenAI => "OpenAI",
             BuiltinProvider::Gemini => "Gemini",
+            BuiltinProvider::Kimi => "Kimi",
             BuiltinProvider::Anthropic => "Anthropic",
             BuiltinProvider::OpenRouter => "OpenRouter",
         }
@@ -216,6 +238,7 @@ impl BuiltinProvider {
         match self {
             BuiltinProvider::OpenAI => "gpt-4.1",
             BuiltinProvider::Gemini => "gemini-2.5-pro",
+            BuiltinProvider::Kimi => KIMI_DEFAULT_MODEL,
             BuiltinProvider::Anthropic => DEFAULT_MODEL,
             BuiltinProvider::OpenRouter => "openrouter/anthropic/claude-sonnet-4",
         }
@@ -265,6 +288,16 @@ pub fn generate_multi_provider_profile(
                     ProviderConfig::Gemini {
                         api_key: Some(setup.api_key),
                         api_endpoint: None,
+                        auth: None,
+                    },
+                );
+            }
+            BuiltinProvider::Kimi => {
+                profile.providers.insert(
+                    "kimi".to_string(),
+                    ProviderConfig::Kimi {
+                        api_key: Some(setup.api_key),
+                        api_endpoint: Some(KIMI_DEFAULT_BASE_URL.to_string()),
                         auth: None,
                     },
                 );
@@ -367,6 +400,22 @@ pub fn config_to_toml_preview(profile: &ProfileConfig, profile_name: &str) -> St
                 ..
             } => {
                 toml.push_str("type = \"gemini\"\n");
+                if let Some(endpoint) = api_endpoint {
+                    toml.push_str(&format!("api_endpoint = \"{}\"\n", endpoint));
+                }
+                if let Some(key) = api_key {
+                    toml.push_str(&format!(
+                        "api_key = \"{}\"\n",
+                        if key.is_empty() { "" } else { "***" }
+                    ));
+                }
+            }
+            ProviderConfig::Kimi {
+                api_key,
+                api_endpoint,
+                ..
+            } => {
+                toml.push_str("type = \"kimi\"\n");
                 if let Some(endpoint) = api_endpoint {
                     toml.push_str(&format!("api_endpoint = \"{}\"\n", endpoint));
                 }
@@ -566,6 +615,30 @@ mod tests {
             .take_while(|l| !l.starts_with('[') || l.contains("providers.ollama"))
             .any(|l| l.contains("api_key"));
         assert!(!has_api_key_in_ollama_section);
+    }
+
+    #[test]
+    fn test_generate_kimi_profile() {
+        let profile = generate_kimi_profile();
+
+        assert!(matches!(profile.provider, Some(ProviderType::Local)));
+        assert_eq!(profile.model, Some(KIMI_DEFAULT_MODEL.to_string()));
+
+        let provider = profile
+            .providers
+            .get("kimi")
+            .expect("kimi provider should exist");
+        match provider {
+            ProviderConfig::Kimi {
+                api_key,
+                api_endpoint,
+                ..
+            } => {
+                assert!(api_key.is_none());
+                assert_eq!(api_endpoint.as_deref(), Some(KIMI_DEFAULT_BASE_URL));
+            }
+            _ => panic!("Expected Kimi provider"),
+        }
     }
 
     #[test]

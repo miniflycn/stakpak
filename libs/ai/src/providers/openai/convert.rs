@@ -133,6 +133,7 @@ fn to_openai_messages_with_mode(msg: &Message, mode: SystemMessageMode) -> Vec<C
                     name: msg.name.clone(),
                     tool_calls: None,
                     tool_call_id: Some(tool_call_id.clone()),
+                    reasoning_content: None,
                 });
             }
         }
@@ -224,6 +225,7 @@ fn to_openai_messages_with_mode(msg: &Message, mode: SystemMessageMode) -> Vec<C
         name: msg.name.clone(),
         tool_calls,
         tool_call_id,
+        reasoning_content: None,
     }]
 }
 

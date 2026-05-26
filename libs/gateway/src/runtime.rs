@@ -7,7 +7,10 @@ use tracing::{error, info, warn};
 
 use crate::{
     api::{GatewayApiState, router as api_router},
-    channels::{Channel, discord::DiscordChannel, slack::SlackChannel, telegram::TelegramChannel},
+    channels::{
+        Channel, discord::DiscordChannel, feishu::FeishuChannel, slack::SlackChannel,
+        telegram::TelegramChannel,
+    },
     client::StakpakClient,
     config::GatewayConfig,
     dispatcher::{Dispatcher, RunOverrideResolver, noop_run_override_resolver},
@@ -232,6 +235,17 @@ pub fn build_channels(config: &GatewayConfig) -> Result<HashMap<String, Arc<dyn 
             Arc::new(SlackChannel::new(
                 slack.bot_token.clone(),
                 slack.app_token.clone(),
+            )),
+        );
+    }
+
+    if let Some(feishu) = &config.channels.feishu {
+        channels.insert(
+            "feishu".to_string(),
+            Arc::new(FeishuChannel::new(
+                feishu.app_id.clone(),
+                feishu.app_secret.clone(),
+                feishu.domain.clone(),
             )),
         );
     }

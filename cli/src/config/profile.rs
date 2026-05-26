@@ -267,6 +267,15 @@ impl ProfileConfig {
                         }
                     }
                 }
+                ProviderConfig::Kimi { api_endpoint, .. } => {
+                    if let Some(ep) = api_endpoint {
+                        let clean = Self::clean_api_endpoint(Some(ep.clone()));
+                        if clean.as_ref() != Some(ep) {
+                            *api_endpoint = clean;
+                            cleaned = true;
+                        }
+                    }
+                }
                 ProviderConfig::Custom { api_endpoint, .. } => {
                     let clean = Self::clean_api_endpoint(Some(api_endpoint.clone()));
                     if let Some(clean_ep) = clean
@@ -517,6 +526,7 @@ impl ProfileConfig {
                 "openai",
                 "google",
                 "gemini",
+                "kimi",
                 "amazon-bedrock",
                 "github-copilot",
             ];

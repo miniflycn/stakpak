@@ -15,6 +15,8 @@ pub struct GatewayCliFlags {
     pub discord_token: Option<String>,
     pub slack_bot_token: Option<String>,
     pub slack_app_token: Option<String>,
+    pub feishu_app_id: Option<String>,
+    pub feishu_app_secret: Option<String>,
     pub store: Option<PathBuf>,
 }
 
@@ -64,6 +66,10 @@ pub enum GatewayConfigValidationError {
     EmptySlackBotToken,
     #[error("slack app_token cannot be empty")]
     EmptySlackAppToken,
+    #[error("feishu app_id cannot be empty")]
+    EmptyFeishuAppId,
+    #[error("feishu app_secret cannot be empty")]
+    EmptyFeishuAppSecret,
     #[error("approval_mode=allowlist requires non-empty approval_allowlist")]
     EmptyApprovalAllowlist,
 }
@@ -131,6 +137,7 @@ pub struct ChannelConfigs {
     pub telegram: Option<TelegramConfig>,
     pub discord: Option<DiscordConfig>,
     pub slack: Option<SlackConfig>,
+    pub feishu: Option<FeishuConfig>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -170,6 +177,24 @@ pub struct DiscordConfig {
 pub struct SlackConfig {
     pub bot_token: String,
     pub app_token: String,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub auto_approve: Option<Vec<String>>,
+    #[serde(default)]
+    pub profile: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeishuConfig {
+    pub app_id: String,
+    pub app_secret: String,
+    #[serde(default)]
+    pub encrypt_key: Option<String>,
+    #[serde(default)]
+    pub verification_token: Option<String>,
+    #[serde(default)]
+    pub domain: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
@@ -315,6 +340,7 @@ impl GatewayConfig {
             upsert_optional_subtable(channels, "telegram", &self.channels.telegram)?;
             upsert_optional_subtable(channels, "discord", &self.channels.discord)?;
             upsert_optional_subtable(channels, "slack", &self.channels.slack)?;
+            upsert_optional_subtable(channels, "feishu", &self.channels.feishu)?;
         }
 
         let text = toml::to_string_pretty(&toml::Value::Table(root))
@@ -356,6 +382,15 @@ impl GatewayConfig {
             }
         }
 
+        if let Some(feishu) = &self.channels.feishu {
+            if feishu.app_id.trim().is_empty() {
+                return Err(GatewayConfigValidationError::EmptyFeishuAppId);
+            }
+            if feishu.app_secret.trim().is_empty() {
+                return Err(GatewayConfigValidationError::EmptyFeishuAppSecret);
+            }
+        }
+
         if matches!(self.gateway.approval_mode, ApprovalMode::Allowlist)
             && self.gateway.approval_allowlist.is_empty()
         {
@@ -380,6 +415,9 @@ impl GatewayConfig {
         if self.channels.slack.is_some() {
             channels.push("slack");
         }
+        if self.channels.feishu.is_some() {
+            channels.push("feishu");
+        }
         channels
     }
 
@@ -400,6 +438,10 @@ impl GatewayConfig {
 
         if let Some(channel) = self.channels.slack.as_ref() {
             append_channel_deprecation_warnings(&mut warnings, "slack", channel);
+        }
+
+        if let Some(channel) = self.channels.feishu.as_ref() {
+            append_channel_deprecation_warnings(&mut warnings, "feishu", channel);
         }
 
         warnings
@@ -484,6 +526,23 @@ impl GatewayConfig {
                 self.channels.slack = Some(SlackConfig {
                     bot_token,
                     app_token,
+                    model: None,
+                    auto_approve: None,
+                    profile: None,
+                });
+            }
+        }
+
+        if self.channels.feishu.is_none() {
+            let app_id = std::env::var("FEISHU_APP_ID").ok();
+            let app_secret = std::env::var("FEISHU_APP_SECRET").ok();
+            if let (Some(app_id), Some(app_secret)) = (app_id, app_secret) {
+                self.channels.feishu = Some(FeishuConfig {
+                    app_id,
+                    app_secret,
+                    encrypt_key: std::env::var("FEISHU_ENCRYPT_KEY").ok(),
+                    verification_token: std::env::var("FEISHU_VERIFICATION_TOKEN").ok(),
+                    domain: std::env::var("FEISHU_DOMAIN").ok(),
                     model: None,
                     auto_approve: None,
                     profile: None,
@@ -579,6 +638,43 @@ impl GatewayConfig {
                     .and_then(|value| value.profile.clone()),
             });
         }
+
+        if let (Some(app_id), Some(app_secret)) = (&cli.feishu_app_id, &cli.feishu_app_secret) {
+            self.channels.feishu = Some(FeishuConfig {
+                app_id: app_id.clone(),
+                app_secret: app_secret.clone(),
+                encrypt_key: self
+                    .channels
+                    .feishu
+                    .as_ref()
+                    .and_then(|value| value.encrypt_key.clone()),
+                verification_token: self
+                    .channels
+                    .feishu
+                    .as_ref()
+                    .and_then(|value| value.verification_token.clone()),
+                domain: self
+                    .channels
+                    .feishu
+                    .as_ref()
+                    .and_then(|value| value.domain.clone()),
+                model: self
+                    .channels
+                    .feishu
+                    .as_ref()
+                    .and_then(|value| value.model.clone()),
+                auto_approve: self
+                    .channels
+                    .feishu
+                    .as_ref()
+                    .and_then(|value| value.auto_approve.clone()),
+                profile: self
+                    .channels
+                    .feishu
+                    .as_ref()
+                    .and_then(|value| value.profile.clone()),
+            });
+        }
     }
 
     fn normalize_paths(&mut self) {
@@ -604,6 +700,11 @@ impl ChannelConfigs {
                 .as_ref()
                 .map(channel_overrides_from_parts)
                 .unwrap_or_default(),
+            "feishu" => self
+                .feishu
+                .as_ref()
+                .map(channel_overrides_from_parts)
+                .unwrap_or_default(),
             _ => ChannelOverrides::default(),
         }
     }
@@ -624,6 +725,11 @@ impl ChannelConfigs {
         let slack = self.overrides_for("slack");
         if slack != ChannelOverrides::default() {
             overrides.insert("slack".to_string(), slack);
+        }
+
+        let feishu = self.overrides_for("feishu");
+        if feishu != ChannelOverrides::default() {
+            overrides.insert("feishu".to_string(), feishu);
         }
 
         overrides
@@ -654,6 +760,14 @@ impl ChannelConfigs {
             .and_then(|channel| normalize_optional_string(channel.profile.clone()))
         {
             profiles.insert("slack".to_string(), profile);
+        }
+
+        if let Some(profile) = self
+            .feishu
+            .as_ref()
+            .and_then(|channel| normalize_optional_string(channel.profile.clone()))
+        {
+            profiles.insert("feishu".to_string(), profile);
         }
 
         profiles
@@ -695,6 +809,20 @@ impl ChannelOverrideParts for DiscordConfig {
 }
 
 impl ChannelOverrideParts for SlackConfig {
+    fn model(&self) -> Option<String> {
+        self.model.clone()
+    }
+
+    fn auto_approve(&self) -> Option<Vec<String>> {
+        self.auto_approve.clone()
+    }
+
+    fn profile(&self) -> Option<String> {
+        self.profile.clone()
+    }
+}
+
+impl ChannelOverrideParts for FeishuConfig {
     fn model(&self) -> Option<String> {
         self.model.clone()
     }
@@ -867,6 +995,7 @@ impl PersistedGatewayConfig {
                 telegram: self.channels.telegram,
                 discord: self.channels.discord,
                 slack: self.channels.slack,
+                feishu: self.channels.feishu,
             },
         }
     }
@@ -914,6 +1043,8 @@ struct PersistedChannelConfigs {
     discord: Option<DiscordConfig>,
     #[serde(default)]
     slack: Option<SlackConfig>,
+    #[serde(default)]
+    feishu: Option<FeishuConfig>,
 }
 
 fn binding_to_runtime(binding: &BindingConfig) -> Binding {
@@ -1038,6 +1169,7 @@ mod tests {
                 }),
                 discord: None,
                 slack: None,
+                feishu: None,
             },
             gateway: GatewaySettings {
                 title_template: "{channel}:{chat_type}:{peer}".to_string(),
@@ -1062,6 +1194,7 @@ mod tests {
             }),
             discord: None,
             slack: None,
+            feishu: None,
         };
 
         let overrides = channels.overrides_map();
@@ -1093,6 +1226,7 @@ mod tests {
             }),
             discord: None,
             slack: None,
+            feishu: None,
         };
 
         let overrides = channels.overrides_for("telegram");
@@ -1115,6 +1249,7 @@ mod tests {
             }),
             discord: None,
             slack: None,
+            feishu: None,
         };
 
         let overrides = channels.overrides_for("telegram");
@@ -1184,6 +1319,7 @@ mod tests {
             }),
             discord: None,
             slack: None,
+            feishu: None,
         };
 
         let profiles = channels.profiles_map();

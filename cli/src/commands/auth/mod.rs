@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 pub enum AuthCommands {
     /// Login to an LLM provider
     Login {
-        /// Provider to authenticate with (e.g., "anthropic", "openai", "gemini", "stakpak", "amazon-bedrock")
+        /// Provider to authenticate with (e.g., "anthropic", "openai", "gemini", "kimi", "stakpak", "amazon-bedrock")
         #[arg(long, default_value = "stakpak")]
         provider: String,
 

@@ -2,7 +2,7 @@
 
 use super::provider::OAuthProvider;
 use super::providers::{
-    AnthropicProvider, GeminiProvider, GitHubCopilotProvider, OpenAICodexProvider,
+    AnthropicProvider, GeminiProvider, GitHubCopilotProvider, KimiProvider, OpenAICodexProvider,
     OpenRouterProvider, StakpakProvider,
 };
 use std::collections::HashMap;
@@ -24,6 +24,7 @@ impl ProviderRegistry {
         registry.register(Box::new(AnthropicProvider::new()));
         registry.register(Box::new(OpenAICodexProvider::new()));
         registry.register(Box::new(GeminiProvider::new()));
+        registry.register(Box::new(KimiProvider::new()));
         registry.register(Box::new(OpenRouterProvider::new()));
         registry.register(Box::new(GitHubCopilotProvider::new()));
 
@@ -134,6 +135,18 @@ mod tests {
         assert!(providers.iter().any(|candidate| candidate.id() == "gemini"));
         assert_eq!(provider.id(), "gemini");
         assert_eq!(provider.name(), "Google (Gemini)");
+        assert_eq!(methods.len(), 1);
+        assert_eq!(methods[0].id, "api-key");
+    }
+
+    #[test]
+    fn test_registry_registers_kimi_with_api_key_auth_method() {
+        let registry = ProviderRegistry::new();
+        let provider = registry.get("kimi").expect("kimi provider");
+        let methods = provider.auth_methods();
+
+        assert_eq!(provider.id(), "kimi");
+        assert_eq!(provider.name(), "Kimi");
         assert_eq!(methods.len(), 1);
         assert_eq!(methods[0].id, "api-key");
     }

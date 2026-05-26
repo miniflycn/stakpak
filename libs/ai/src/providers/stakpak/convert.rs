@@ -104,6 +104,7 @@ fn to_stakpak_messages(msg: &Message) -> Vec<ChatMessage> {
                 name: msg.name.clone(),
                 tool_calls: None,
                 tool_call_id: Some(tool_call_id),
+                reasoning_content: None,
             })
             .collect();
     }
@@ -188,6 +189,7 @@ fn to_stakpak_messages(msg: &Message) -> Vec<ChatMessage> {
         name: msg.name.clone(),
         tool_calls,
         tool_call_id,
+        reasoning_content: None,
     }]
 }
 

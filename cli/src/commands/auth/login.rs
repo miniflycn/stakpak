@@ -4,7 +4,7 @@ use crate::config::{ProfileConfig, ProviderType};
 use crate::onboarding::auth_flow::{AuthFlowConfig, run_provider_auth_flow};
 use crate::onboarding::config_templates::{
     generate_anthropic_profile, generate_gemini_profile, generate_github_copilot_profile,
-    generate_openai_profile, generate_openrouter_profile,
+    generate_kimi_profile, generate_openai_profile, generate_openrouter_profile,
 };
 use crate::onboarding::menu::select_option_no_header;
 use crate::onboarding::navigation::NavResult;
@@ -361,6 +361,7 @@ async fn handle_non_interactive_api_setup(
         "anthropic" => generate_anthropic_profile(),
         "openai" => generate_openai_profile(),
         "gemini" => generate_gemini_profile(),
+        "kimi" => generate_kimi_profile(),
         "openrouter" => generate_openrouter_profile(),
         "github-copilot" => {
             return Err("GitHub Copilot does not support API key authentication.\n\
@@ -374,7 +375,7 @@ async fn handle_non_interactive_api_setup(
         }
         _ => {
             return Err(format!(
-                "Unsupported provider '{}'. Supported: anthropic, openai, gemini, openrouter, stakpak, amazon-bedrock, github-copilot\n\
+                "Unsupported provider '{}'. Supported: anthropic, openai, gemini, kimi, openrouter, stakpak, amazon-bedrock, github-copilot\n\
                  For bedrock, use: stakpak auth login --provider amazon-bedrock --region <region>\n\
                  For github-copilot, run without --api-key to use the device flow.",
                 provider_id
@@ -684,6 +685,11 @@ mod tests {
     async fn non_interactive_gemini_sets_provider_api_endpoint() {
         assert_non_interactive_provider_endpoint("gemini", "https://gemini-proxy.example.com")
             .await;
+    }
+
+    #[tokio::test]
+    async fn non_interactive_kimi_sets_provider_api_endpoint() {
+        assert_non_interactive_provider_endpoint("kimi", "https://kimi-proxy.example.com").await;
     }
 
     #[tokio::test]

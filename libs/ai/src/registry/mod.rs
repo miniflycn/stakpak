@@ -106,6 +106,15 @@ impl Default for ProviderRegistry {
             registry = registry.register("google", provider);
         }
 
+        // Register Kimi if API key is available
+        use crate::providers::kimi::{KimiConfig, KimiProvider};
+        if let Ok(api_key) = std::env::var("KIMI_API_KEY")
+            && !api_key.is_empty()
+            && let Ok(provider) = KimiProvider::new(KimiConfig::new(api_key))
+        {
+            registry = registry.register("kimi", provider);
+        }
+
         registry
     }
 }

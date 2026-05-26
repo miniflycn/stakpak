@@ -236,10 +236,10 @@ pub enum AutopilotChannelCommands {
 
     /// Add a channel
     #[command(
-        after_long_help = "HOW TO GET TOKENS:\n\n  Slack (requires both --bot-token and --app-token):\n\n    RECOMMENDED: Use the app manifest for quick setup:\n    1. Go to https://api.slack.com/apps → Create New App → From an app manifest\n    2. Paste the manifest from: https://github.com/stakpak/agent/blob/main/libs/gateway/src/channels/slack-manifest.yaml\n    3. Basic Information → App-Level Tokens → generate token with connections:write scope (xapp-...)\n    4. Install to Workspace → copy Bot User OAuth Token (xoxb-...)\n\n    Manual setup (if you already have an app):\n    1. Create app at https://api.slack.com/apps\n    2. Enable Socket Mode → generate app-level token (xapp-...) with connections:write scope\n    3. OAuth & Permissions → add Bot Token Scopes:\n       app_mentions:read, channels:history, channels:read, chat:write,\n       groups:history, groups:read, im:history, im:read,\n       mpim:history, mpim:read, reactions:read, reactions:write\n    4. Event Subscriptions → subscribe to bot events:\n       message.channels, message.groups, message.im, app_mention\n    5. Interactivity & Shortcuts → enable\n    6. Install to Workspace → copy Bot User OAuth Token (xoxb-...)\n\n  Telegram:\n    1. Message @BotFather on Telegram\n    2. Send /newbot → choose name and username (must end in 'bot')\n    3. Copy the bot token (format: 123456789:ABCdef...)\n\n  Discord:\n    1. Create app at https://discord.com/developers/applications\n    2. Bot tab → copy the bot token\n    3. OAuth2 → enable bot scope and required permissions\n\n  Optional default notification target:\n    --target sets [notifications].channel/chat_id for watch alerts\n    Example: --target \"#engineering\" (Slack)\n"
+        after_long_help = "HOW TO GET TOKENS:\n\n  Slack (requires both --bot-token and --app-token):\n\n    RECOMMENDED: Use the app manifest for quick setup:\n    1. Go to https://api.slack.com/apps → Create New App → From an app manifest\n    2. Paste the manifest from: https://github.com/stakpak/agent/blob/main/libs/gateway/src/channels/slack-manifest.yaml\n    3. Basic Information → App-Level Tokens → generate token with connections:write scope (xapp-...)\n    4. Install to Workspace → copy Bot User OAuth Token (xoxb-...)\n\n    Manual setup (if you already have an app):\n    1. Create app at https://api.slack.com/apps\n    2. Enable Socket Mode → generate app-level token (xapp-...) with connections:write scope\n    3. OAuth & Permissions → add Bot Token Scopes:\n       app_mentions:read, channels:history, channels:read, chat:write,\n       groups:history, groups:read, im:history, im:read,\n       mpim:history, mpim:read, reactions:read, reactions:write\n    4. Event Subscriptions → subscribe to bot events:\n       message.channels, message.groups, message.im, app_mention\n    5. Interactivity & Shortcuts → enable\n    6. Install to Workspace → copy Bot User OAuth Token (xoxb-...)\n\n  Feishu/Lark:\n    1. Create an internal app in Feishu Open Platform\n    2. Enable Bot and Event Subscription with long connection mode\n    3. Subscribe to im.message.receive_v1 and card action events\n    4. Copy App ID and App Secret\n\n  Telegram:\n    1. Message @BotFather on Telegram\n    2. Send /newbot → choose name and username (must end in 'bot')\n    3. Copy the bot token (format: 123456789:ABCdef...)\n\n  Discord:\n    1. Create app at https://discord.com/developers/applications\n    2. Bot tab → copy the bot token\n    3. OAuth2 → enable bot scope and required permissions\n\n  Optional default notification target:\n    --target sets [notifications].channel/chat_id for watch alerts\n    Example: --target \"#engineering\" (Slack), \"oc_xxx\" (Feishu)\n"
     )]
     Add {
-        /// Channel type (slack, telegram, discord)
+        /// Channel type (slack, telegram, discord, feishu)
         #[arg(value_enum)]
         channel_type: ChannelType,
 
@@ -254,6 +254,26 @@ pub enum AutopilotChannelCommands {
         /// Slack app token (xapp-...)
         #[arg(long)]
         app_token: Option<String>,
+
+        /// Feishu/Lark app ID (cli_...)
+        #[arg(long)]
+        app_id: Option<String>,
+
+        /// Feishu/Lark app secret
+        #[arg(long)]
+        app_secret: Option<String>,
+
+        /// Feishu/Lark event encryption key (stored for webhook compatibility)
+        #[arg(long)]
+        encrypt_key: Option<String>,
+
+        /// Feishu/Lark event verification token (stored for webhook compatibility)
+        #[arg(long)]
+        verification_token: Option<String>,
+
+        /// Feishu/Lark OpenAPI domain (default: https://open.feishu.cn)
+        #[arg(long)]
+        domain: Option<String>,
 
         /// Default notification target (Slack channel, Telegram chat_id, Discord channel_id)
         #[arg(long)]
@@ -290,6 +310,7 @@ pub enum ChannelType {
     Slack,
     Telegram,
     Discord,
+    Feishu,
     Whatsapp,
     Webhook,
 }
@@ -521,6 +542,7 @@ impl std::fmt::Display for ChannelType {
             ChannelType::Slack => write!(f, "slack"),
             ChannelType::Telegram => write!(f, "telegram"),
             ChannelType::Discord => write!(f, "discord"),
+            ChannelType::Feishu => write!(f, "feishu"),
             ChannelType::Whatsapp => write!(f, "whatsapp"),
             ChannelType::Webhook => write!(f, "webhook"),
         }
@@ -831,10 +853,13 @@ async fn start_autopilot(config: &mut AppConfig, options: StartOptions) -> Resul
         let discord_token = std::env::var("DISCORD_BOT_TOKEN").ok();
         let slack_bot_token = std::env::var("SLACK_BOT_TOKEN").ok();
         let slack_app_token = std::env::var("SLACK_APP_TOKEN").ok();
+        let feishu_app_id = std::env::var("FEISHU_APP_ID").ok();
+        let feishu_app_secret = std::env::var("FEISHU_APP_SECRET").ok();
 
         let has_env_channels = telegram_token.is_some()
             || discord_token.is_some()
-            || (slack_bot_token.is_some() && slack_app_token.is_some());
+            || (slack_bot_token.is_some() && slack_app_token.is_some())
+            || (feishu_app_id.is_some() && feishu_app_secret.is_some());
 
         if has_env_channels {
             let mut gateway_config = stakpak_gateway::GatewayConfig::load(
@@ -870,6 +895,18 @@ async fn start_autopilot(config: &mut AppConfig, options: StartOptions) -> Resul
                     profile: Some(config.profile_name.clone()),
                 });
             }
+            if let (Some(app_id), Some(app_secret)) = (feishu_app_id, feishu_app_secret) {
+                gateway_config.channels.feishu = Some(stakpak_gateway::config::FeishuConfig {
+                    app_id,
+                    app_secret,
+                    encrypt_key: std::env::var("FEISHU_ENCRYPT_KEY").ok(),
+                    verification_token: std::env::var("FEISHU_VERIFICATION_TOKEN").ok(),
+                    domain: std::env::var("FEISHU_DOMAIN").ok(),
+                    model: None,
+                    auto_approve: None,
+                    profile: Some(config.profile_name.clone()),
+                });
+            }
 
             gateway_config
                 .save(autopilot_config_path.as_path())
@@ -882,7 +919,7 @@ async fn start_autopilot(config: &mut AppConfig, options: StartOptions) -> Resul
             );
         } else if !options.non_interactive {
             println!();
-            println!("Channels let autopilot talk to you on Slack, Telegram, or Discord.");
+            println!("Channels let autopilot talk to you on Slack, Feishu, Telegram, or Discord.");
             println!("You can add them now or later with: stakpak autopilot channel add");
             println!();
             println!("  Slack quick setup: use the app manifest at");
@@ -1684,6 +1721,12 @@ fn gateway_channel_profiles_with_default(
             .or_insert_with(|| default_profile.clone());
     }
 
+    if channels.feishu.is_some() {
+        profiles
+            .entry("feishu".to_string())
+            .or_insert_with(|| default_profile.clone());
+    }
+
     profiles
 }
 
@@ -2160,6 +2203,11 @@ fn add_channel_with_optional_target(
     token: Option<String>,
     bot_token: Option<String>,
     app_token: Option<String>,
+    app_id: Option<String>,
+    app_secret: Option<String>,
+    encrypt_key: Option<String>,
+    verification_token: Option<String>,
+    domain: Option<String>,
     target: Option<String>,
     profile: Option<String>,
 ) -> Result<Option<String>, String> {
@@ -2247,6 +2295,51 @@ fn add_channel_with_optional_target(
                 }
                 channels.insert("slack".to_string(), toml::Value::Table(slack));
             }
+            ChannelType::Feishu => {
+                let raw_app_id = app_id.or_else(|| std::env::var("FEISHU_APP_ID").ok()).ok_or(
+                    "Feishu app ID required. Use --app-id or set FEISHU_APP_ID\n\n  Create an internal app in Feishu Open Platform → Basic Info → App ID",
+                )?;
+                let raw_app_secret =
+                    app_secret
+                        .or_else(|| std::env::var("FEISHU_APP_SECRET").ok())
+                        .ok_or(
+                            "Feishu app secret required. Use --app-secret or set FEISHU_APP_SECRET\n\n  Create an internal app in Feishu Open Platform → Credentials & Basic Info → App Secret",
+                        )?;
+                let app_id = require_non_empty_token(
+                    raw_app_id,
+                    "Feishu app_id cannot be empty. Use --app-id or set FEISHU_APP_ID",
+                )?;
+                let app_secret = require_non_empty_token(
+                    raw_app_secret,
+                    "Feishu app_secret cannot be empty. Use --app-secret or set FEISHU_APP_SECRET",
+                )?;
+
+                let mut feishu = toml::value::Table::new();
+                feishu.insert("app_id".to_string(), toml::Value::String(app_id));
+                feishu.insert("app_secret".to_string(), toml::Value::String(app_secret));
+                if let Some(value) = normalize_optional_string(
+                    encrypt_key.or_else(|| std::env::var("FEISHU_ENCRYPT_KEY").ok()),
+                ) {
+                    feishu.insert("encrypt_key".to_string(), toml::Value::String(value));
+                }
+                if let Some(value) = normalize_optional_string(
+                    verification_token.or_else(|| std::env::var("FEISHU_VERIFICATION_TOKEN").ok()),
+                ) {
+                    feishu.insert("verification_token".to_string(), toml::Value::String(value));
+                }
+                if let Some(value) = normalize_optional_string(
+                    domain.or_else(|| std::env::var("FEISHU_DOMAIN").ok()),
+                ) {
+                    feishu.insert("domain".to_string(), toml::Value::String(value));
+                }
+                if let Some(profile_name) = normalized_profile.as_ref() {
+                    feishu.insert(
+                        "profile".to_string(),
+                        toml::Value::String(profile_name.clone()),
+                    );
+                }
+                channels.insert("feishu".to_string(), toml::Value::Table(feishu));
+            }
             _ => return Err(format!("{:?} is not supported yet", channel_type)),
         }
     }
@@ -2271,6 +2364,7 @@ fn remove_channel(config_path: &Path, channel_type: ChannelType) -> Result<(), S
         ChannelType::Telegram => config.channels.telegram = None,
         ChannelType::Discord => config.channels.discord = None,
         ChannelType::Slack => config.channels.slack = None,
+        ChannelType::Feishu => config.channels.feishu = None,
         _ => return Err(format!("{:?} is not supported yet", channel_type)),
     }
 
@@ -2309,6 +2403,9 @@ async fn run_channel_command(
             if config.channels.slack.is_some() {
                 println!("{:<15} configured", "slack");
             }
+            if config.channels.feishu.is_some() {
+                println!("{:<15} configured", "feishu");
+            }
             Ok(())
         }
         AutopilotChannelCommands::Add {
@@ -2316,6 +2413,11 @@ async fn run_channel_command(
             token,
             bot_token,
             app_token,
+            app_id,
+            app_secret,
+            encrypt_key,
+            verification_token,
+            domain,
             target,
             profile,
         } => {
@@ -2339,6 +2441,11 @@ async fn run_channel_command(
                 token,
                 bot_token,
                 app_token,
+                app_id,
+                app_secret,
+                encrypt_key,
+                verification_token,
+                domain,
                 target,
                 requested_profile,
             )?;
@@ -3325,6 +3432,10 @@ fn build_channel_statuses(
         channels.push(build_single_channel_status("slack", notification_defaults));
     }
 
+    if gateway_config.channels.feishu.is_some() {
+        channels.push(build_single_channel_status("feishu", notification_defaults));
+    }
+
     channels
 }
 
@@ -4205,6 +4316,11 @@ prompt = "Check system health"
             None,
             Some("xoxb-test".to_string()),
             Some("xapp-test".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
             Some("#eng".to_string()),
             None,
         );
@@ -4252,6 +4368,11 @@ prompt = "Check system health"
             None,
             Some("xoxb-test".to_string()),
             Some("xapp-test".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
             Some("   ".to_string()),
             None,
         );
@@ -4283,6 +4404,11 @@ prompt = "Check system health"
             None,
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(empty_telegram_result.is_err());
 
@@ -4290,6 +4416,11 @@ prompt = "Check system health"
             path.as_path(),
             ChannelType::Discord,
             Some("   ".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
             None,
             None,
             None,
@@ -4305,6 +4436,11 @@ prompt = "Check system health"
             Some("xapp-test".to_string()),
             None,
             None,
+            None,
+            None,
+            None,
+            None,
+            None,
         );
         assert!(empty_bot_result.is_err());
 
@@ -4314,6 +4450,11 @@ prompt = "Check system health"
             None,
             Some("xoxb-test".to_string()),
             Some("   ".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
             None,
             None,
         );
@@ -4415,6 +4556,11 @@ api_key = "default-key"
                 token: None,
                 bot_token: None,
                 app_token: None,
+                app_id: None,
+                app_secret: None,
+                encrypt_key: None,
+                verification_token: None,
+                domain: None,
                 target: None,
                 profile: None,
             },

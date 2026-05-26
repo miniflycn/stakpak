@@ -454,6 +454,7 @@ impl AppConfig {
             "anthropic" => "ANTHROPIC_API_KEY",
             "openai" => "OPENAI_API_KEY",
             "gemini" => "GEMINI_API_KEY",
+            "kimi" => "KIMI_API_KEY",
             "openrouter" => "OPENROUTER_API_KEY",
             _ => return None,
         };
@@ -675,6 +676,43 @@ impl AppConfig {
         Some(self.build_openai_provider_config_with_auth(auth))
     }
 
+    fn build_kimi_provider_config_with_auth(&self, auth: ProviderAuth) -> ProviderConfig {
+        let api_endpoint = match self.providers.get("kimi") {
+            Some(ProviderConfig::Kimi { api_endpoint, .. }) => api_endpoint.clone(),
+            _ => None,
+        };
+
+        ProviderConfig::Kimi {
+            api_key: None,
+            api_endpoint,
+            auth: Some(auth),
+        }
+    }
+
+    fn get_kimi_provider_config_with_auth(&self) -> Option<ProviderConfig> {
+        self.resolve_provider_auth("kimi")
+            .map(|auth| self.build_kimi_provider_config_with_auth(auth))
+    }
+
+    async fn get_kimi_provider_config_with_auth_async(&self) -> Option<ProviderConfig> {
+        let auth = if let Some(auth) = self.resolve_provider_auth("kimi") {
+            match self.refresh_provider_auth_if_needed("kimi", &auth).await {
+                Ok(refreshed_auth) => Some(refreshed_auth),
+                Err(e) => {
+                    eprintln!(
+                        "\x1b[33mWarning: Failed to refresh Kimi token: {}\x1b[0m",
+                        e
+                    );
+                    Some(auth)
+                }
+            }
+        } else {
+            None
+        }?;
+
+        Some(self.build_kimi_provider_config_with_auth(auth))
+    }
+
     /// Get Gemini config with resolved credentials.
     pub fn get_gemini_config_with_auth(&self) -> Option<GeminiConfig> {
         // First check providers HashMap
@@ -743,7 +781,7 @@ impl AppConfig {
         for (name, provider_config) in &self.providers {
             if !matches!(
                 name.as_str(),
-                "openai" | "anthropic" | "gemini" | "amazon-bedrock"
+                "openai" | "anthropic" | "gemini" | "kimi" | "amazon-bedrock"
             ) {
                 config.add_provider(name, provider_config.clone());
             }
@@ -757,6 +795,7 @@ impl AppConfig {
         openai: Option<ProviderConfig>,
         anthropic: Option<AnthropicConfig>,
         gemini: Option<GeminiConfig>,
+        kimi: Option<ProviderConfig>,
     ) {
         if let Some(openai) = openai {
             config.add_provider("openai", openai);
@@ -781,6 +820,9 @@ impl AppConfig {
                     auth: None, // Auth is already resolved into api_key
                 },
             );
+        }
+        if let Some(kimi) = kimi {
+            config.add_provider("kimi", kimi);
         }
         // Bedrock uses AWS credential chain — no API key resolution needed.
         // Just pass through the config if present.
@@ -811,6 +853,7 @@ impl AppConfig {
             self.get_openai_provider_config_with_auth(),
             self.get_anthropic_config_with_auth(),
             self.get_gemini_config_with_auth(),
+            self.get_kimi_provider_config_with_auth(),
         );
 
         config
@@ -826,6 +869,7 @@ impl AppConfig {
             self.get_openai_provider_config_with_auth_async().await,
             self.get_anthropic_config_with_auth_async().await,
             self.get_gemini_config_with_auth_async().await,
+            self.get_kimi_provider_config_with_auth_async().await,
         );
 
         config
@@ -856,7 +900,7 @@ impl AppConfig {
         }
 
         let config_provider = Some("Local".to_string());
-        let builtin_providers = ["anthropic", "openai", "gemini", "openrouter"];
+        let builtin_providers = ["anthropic", "openai", "gemini", "kimi", "openrouter"];
 
         for provider_name in builtin_providers {
             if let Some(auth) = self.resolve_provider_auth(provider_name) {
@@ -864,6 +908,7 @@ impl AppConfig {
                     "anthropic" => "Anthropic",
                     "openai" => "OpenAI",
                     "gemini" => "Gemini",
+                    "kimi" => "Kimi",
                     "openrouter" => "OpenRouter",
                     _ => provider_name,
                 };

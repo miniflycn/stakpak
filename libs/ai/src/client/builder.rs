@@ -4,8 +4,8 @@ use super::{ClientConfig, Inference, InferenceConfig};
 use crate::error::Result;
 use crate::provider::Provider;
 use crate::providers::{
-    anthropic::AnthropicProvider, gemini::GeminiProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, stakpak::StakpakProvider,
+    anthropic::AnthropicProvider, gemini::GeminiProvider, kimi::KimiProvider,
+    openai::OpenAIProvider, openrouter::OpenRouterProvider, stakpak::StakpakProvider,
 };
 use crate::registry::ProviderRegistry;
 
@@ -63,6 +63,13 @@ impl ClientBuilder {
             && let Ok(provider) = GeminiProvider::new(config)
         {
             registry = registry.register("google", provider);
+        }
+
+        // Register Kimi if configured
+        if let Some(config) = inference_config.kimi_config
+            && let Ok(provider) = KimiProvider::new(config)
+        {
+            registry = registry.register("kimi", provider);
         }
 
         // Register Stakpak if configured

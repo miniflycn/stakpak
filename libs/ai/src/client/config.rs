@@ -1,7 +1,7 @@
 //! Client configuration
 
 use crate::providers::{
-    anthropic::AnthropicConfig, gemini::GeminiConfig, openai::OpenAIConfig,
+    anthropic::AnthropicConfig, gemini::GeminiConfig, kimi::KimiConfig, openai::OpenAIConfig,
     openrouter::OpenRouterConfig, stakpak::StakpakProviderConfig,
 };
 
@@ -58,6 +58,7 @@ impl ClientConfig {
 ///         .openai("sk-...", None)
 ///         .anthropic("sk-ant-...", None)
 ///         .gemini("your-key", None)
+///         .kimi("sk-kimi-...", None)
 ///         .stakpak("your-stakpak-key", None)
 /// );
 /// ```
@@ -66,6 +67,7 @@ pub struct InferenceConfig {
     pub(crate) openai_config: Option<OpenAIConfig>,
     pub(crate) anthropic_config: Option<AnthropicConfig>,
     pub(crate) gemini_config: Option<GeminiConfig>,
+    pub(crate) kimi_config: Option<KimiConfig>,
     pub(crate) stakpak_config: Option<StakpakProviderConfig>,
     pub(crate) openrouter_config: Option<OpenRouterConfig>,
     #[cfg(feature = "bedrock")]
@@ -195,6 +197,45 @@ impl InferenceConfig {
     /// ```
     pub fn gemini_config(mut self, config: GeminiConfig) -> Self {
         self.gemini_config = Some(config);
+        self
+    }
+
+    /// Configure Kimi provider with API key and optional base URL
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use stakai::InferenceConfig;
+    /// let config = InferenceConfig::new()
+    ///     .kimi("sk-kimi-...", None);
+    ///
+    /// // With custom base URL
+    /// let config = InferenceConfig::new()
+    ///     .kimi("sk-kimi-...", Some("https://api.kimi.com/coding/v1".to_string()));
+    /// ```
+    pub fn kimi(mut self, api_key: impl Into<String>, base_url: Option<String>) -> Self {
+        let mut config = KimiConfig::new(api_key);
+        if let Some(url) = base_url {
+            config = config.with_base_url(url);
+        }
+        self.kimi_config = Some(config);
+        self
+    }
+
+    /// Configure Kimi provider with full KimiConfig
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// # use stakai::{InferenceConfig, providers::kimi::KimiConfig};
+    /// let kimi_config = KimiConfig::new("sk-kimi-...")
+    ///     .with_base_url("https://api.kimi.com/coding/v1");
+    ///
+    /// let config = InferenceConfig::new()
+    ///     .kimi_config(kimi_config);
+    /// ```
+    pub fn kimi_config(mut self, config: KimiConfig) -> Self {
+        self.kimi_config = Some(config);
         self
     }
 

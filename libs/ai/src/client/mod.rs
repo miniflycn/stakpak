@@ -31,6 +31,7 @@ impl Inference {
     /// - `OPENAI_API_KEY` for OpenAI
     /// - `ANTHROPIC_API_KEY` for Anthropic
     /// - `GEMINI_API_KEY` for Google Gemini
+    /// - `KIMI_API_KEY` for Kimi
     pub fn new() -> Self {
         Self::builder()
             .build()
@@ -49,6 +50,7 @@ impl Inference {
     ///         .openai("sk-...", None)
     ///         .anthropic("sk-ant-...", None)
     ///         .gemini("your-key", None)
+    ///         .kimi("sk-kimi-...", None)
     /// );
     /// ```
     pub fn with_config(config: InferenceConfig) -> Result<Self> {
